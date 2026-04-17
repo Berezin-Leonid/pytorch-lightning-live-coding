@@ -14,10 +14,10 @@ def create_model(input_channels=1):
     return model
 
 class LitResnet(LightningModule):
-    def __init__(self, num_classes=10, lr=0.05):
+    def __init__(self, input_channels=1, num_classes=10, lr=0.05):
         super().__init__()
         self.save_hyperparameters()
-        self.model = create_model(input_channels=1)
+        self.model = create_model(input_channels=input_channels)
 
         # Демонстрируем легкость композиции метрик через арифметику
         rec = Recall(task="multiclass", num_classes=num_classes, average='macro')
@@ -69,6 +69,10 @@ class LitResnet(LightningModule):
         self.log("test_loss", loss, on_step=False, on_epoch=True)
         self.log_dict(self.test_metrics, on_step=False, on_epoch=True)
         return loss
+
+    def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        x, y = batch
+        return self(x)
 
     def configure_optimizers(self):
         return torch.optim.SGD(self.parameters(), lr=self.hparams.lr, momentum=0.9)
