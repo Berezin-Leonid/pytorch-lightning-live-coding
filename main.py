@@ -11,6 +11,11 @@ trainer = Trainer(
     devices=1
 )
 
-trainer.fit(model, datamodule=dm)
+#trainer.fit(model, datamodule=dm)
 
-trainer.test(model, datamodule=dm)
+#trainer.test(model, datamodule=dm)
+dm.prepare_data()
+dm.setup()
+
+result = trainer.predict(model, dataloaders=dm.test_dataloader())
+print(result[0])
