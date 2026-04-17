@@ -27,3 +27,4 @@ trainer = Trainer(
 
 # Запуск обучения
 trainer.fit(model, train_loader, val_loader)
+trainer.test(model, val_loader)

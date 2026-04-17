@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
+import torchmetrics
 from lightning.pytorch import LightningModule
 
 def create_model(input_channels=1):
@@ -15,6 +16,10 @@ class LitResnet(LightningModule):
         super().__init__()
         self.save_hyperparameters()
         self.model = create_model(input_channels=1)
+        
+        # Инициализируем метрики для разных стадий отдельно
+        self.val_acc = torchmetrics.Accuracy(task="multiclass", num_classes=10)
+        self.test_acc = torchmetrics.Accuracy(task="multiclass", num_classes=10)
 
     def forward(self, x):
         return self.model(x)
@@ -30,7 +35,22 @@ class LitResnet(LightningModule):
         x, y = batch
         logits = self(x)
         loss = F.cross_entropy(logits, y)
-        self.log("val_loss", loss, prog_bar=True)
+        
+        # Вычисляем и логируем метрики
+        self.val_acc(logits, y)
+        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("val_acc", self.val_acc, on_step=False, on_epoch=True, prog_bar=True)
+        return loss
+
+    def test_step(self, batch, batch_idx):
+        x, y = batch
+        logits = self(x)
+        loss = F.cross_entropy(logits, y)
+        
+        # Вычисляем и логируем метрики
+        self.test_acc(logits, y)
+        self.log("test_loss", loss, on_step=False, on_epoch=True)
+        self.log("test_acc", self.test_acc, on_step=False, on_epoch=True)
         return loss
 
     def configure_optimizers(self):
