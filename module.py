@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
 import torchmetrics
+import torchmetrics
+from torchmetrics import MetricCollection, Accuracy, Precision, Recall, F1Score, Specificity
 from lightning.pytorch import LightningModule
 
 def create_model(input_channels=1):
@@ -12,14 +14,27 @@ def create_model(input_channels=1):
     return model
 
 class LitResnet(LightningModule):
-    def __init__(self, lr=0.05):
+    def __init__(self, num_classes=10, lr=0.05):
         super().__init__()
         self.save_hyperparameters()
         self.model = create_model(input_channels=1)
+
+        # Демонстрируем легкость композиции метрик через арифметику
+        rec = Recall(task="multiclass", num_classes=num_classes, average='macro')
+        spec = Specificity(task="multiclass", num_classes=num_classes, average='macro')
+        gmean = (rec * spec) ** 0.5
         
-        # Инициализируем метрики для разных стадий отдельно
-        self.val_acc = torchmetrics.Accuracy(task="multiclass", num_classes=10)
-        self.test_acc = torchmetrics.Accuracy(task="multiclass", num_classes=10)
+        metrics = MetricCollection({
+            'acc': Accuracy(task="multiclass", num_classes=num_classes),
+            'prec': Precision(task="multiclass", num_classes=num_classes, average='macro'),
+            'rec': rec,
+            'f1': F1Score(task="multiclass", num_classes=num_classes, average='macro'),
+            'gmean': gmean
+        })
+        
+        # Создаем отдельные коллекции для каждой стадии
+        self.val_metrics = metrics.clone(prefix="val_")
+        self.test_metrics = metrics.clone(prefix="test_")
 
     def forward(self, x):
         return self.model(x)
@@ -36,10 +51,11 @@ class LitResnet(LightningModule):
         logits = self(x)
         loss = F.cross_entropy(logits, y)
         
-        # Вычисляем и логируем метрики
-        self.val_acc(logits, y)
+        # Обновляем состояние метрик
+        self.val_metrics(logits, y)
+        
         self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log("val_acc", self.val_acc, on_step=False, on_epoch=True, prog_bar=True)
+        self.log_dict(self.val_metrics, on_step=False, on_epoch=True, prog_bar=True)
         return loss
 
     def test_step(self, batch, batch_idx):
@@ -47,10 +63,11 @@ class LitResnet(LightningModule):
         logits = self(x)
         loss = F.cross_entropy(logits, y)
         
-        # Вычисляем и логируем метрики
-        self.test_acc(logits, y)
+        # Обновляем состояние метрик
+        self.test_metrics(logits, y)
+        
         self.log("test_loss", loss, on_step=False, on_epoch=True)
-        self.log("test_acc", self.test_acc, on_step=False, on_epoch=True)
+        self.log_dict(self.test_metrics, on_step=False, on_epoch=True)
         return loss
 
     def configure_optimizers(self):
